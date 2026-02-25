@@ -1,5 +1,36 @@
 import { Electroview } from "electrobun/view";
+import {
+	ClipboardIcon,
+	FileTextIcon,
+	ImageIcon,
+	SearchIcon,
+	Trash2Icon,
+	XIcon,
+} from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+	Empty,
+	EmptyDescription,
+	EmptyHeader,
+	EmptyMedia,
+	EmptyTitle,
+} from "@/components/ui/empty";
+import {
+	InputGroup,
+	InputGroupAddon,
+	InputGroupInput,
+} from "@/components/ui/input-group";
+import { Kbd, KbdGroup } from "@/components/ui/kbd";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Separator } from "@/components/ui/separator";
+import {
+	Tooltip,
+	TooltipPopup,
+	TooltipProvider,
+	TooltipTrigger,
+} from "@/components/ui/tooltip";
 import type { ClipboardItem, ClipboardRPCSchema } from "../shared/rpc-types";
 
 // --- RPC setup ---
@@ -30,7 +61,6 @@ try {
 	const electroview = new Electroview({ rpc });
 	rpcProxy = rpc.proxy;
 } catch {
-	// RPC not available (running in browser dev mode)
 	console.warn("Electroview RPC not available - running in dev mode");
 }
 
@@ -52,7 +82,7 @@ function timeAgo(isoString: string): string {
 
 function truncate(text: string, maxLen: number): string {
 	if (text.length <= maxLen) return text;
-	return text.slice(0, maxLen) + "...";
+	return `${text.slice(0, maxLen)}...`;
 }
 
 // --- Component ---
@@ -116,7 +146,7 @@ function App() {
 		};
 	}, [query, fetchItems]);
 
-	// Blur + Escape handlers (small delay on blur to avoid race with click-to-paste)
+	// Blur + Escape handlers
 	useEffect(() => {
 		let blurTimeout: ReturnType<typeof setTimeout> | null = null;
 		const handleBlur = () => {
@@ -140,7 +170,7 @@ function App() {
 		window.addEventListener("keydown", handleKeyDown);
 		return () => {
 			if (blurTimeout) clearTimeout(blurTimeout);
-			window.removeEventListener("blur-sm", handleBlur);
+			window.removeEventListener("blur", handleBlur);
 			window.removeEventListener("focus", handleFocus);
 			window.removeEventListener("keydown", handleKeyDown);
 		};
@@ -160,165 +190,166 @@ function App() {
 	};
 
 	return (
-		<div className="w-full h-screen p-2">
-			<div className="w-full h-full bg-gray-900/95 backdrop-blur-xl rounded-2xl shadow-2xl border border-gray-700/50 flex flex-col overflow-hidden">
-				{/* Header / Search */}
-				<div className="p-4 border-b border-gray-700/50">
-					<div className="relative">
-						<svg
-							className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400"
-							fill="none"
-							stroke="currentColor"
-							viewBox="0 0 24 24"
-						>
-							<path
-								strokeLinecap="round"
-								strokeLinejoin="round"
-								strokeWidth={2}
-								d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+		<TooltipProvider>
+			<div className="dark w-full h-screen p-2">
+				<div className="w-full h-full bg-background/95 backdrop-blur-xl rounded-2xl shadow-2xl border border-border flex flex-col overflow-hidden">
+					{/* Search header */}
+					<div className="p-3 pb-0">
+						<InputGroup>
+							<InputGroupAddon align="inline-start">
+								<SearchIcon />
+							</InputGroupAddon>
+							<InputGroupInput
+								ref={searchRef}
+								type="search"
+								value={query}
+								onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+									setQuery(e.target.value)
+								}
+								placeholder="Search clipboard history..."
 							/>
-						</svg>
-						<input
-							ref={searchRef}
-							type="text"
-							value={query}
-							onChange={(e) => setQuery(e.target.value)}
-							placeholder="Search clipboard history..."
-							className="w-full pl-10 pr-4 py-2.5 bg-gray-800/80 border border-gray-600/50 rounded-xl text-gray-200 placeholder-gray-500 text-sm focus:outline-hidden focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/30"
-						/>
-						{query && (
-							<button
-								onClick={() => setQuery("")}
-								className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300"
-							>
-								<svg
-									className="w-4 h-4"
-									fill="none"
-									stroke="currentColor"
-									viewBox="0 0 24 24"
-								>
-									<path
-										strokeLinecap="round"
-										strokeLinejoin="round"
-										strokeWidth={2}
-										d="M6 18L18 6M6 6l12 12"
-									/>
-								</svg>
-							</button>
+							{query && (
+								<InputGroupAddon align="inline-end">
+									<Tooltip>
+										<TooltipTrigger
+											render={
+												<Button
+													variant="ghost"
+													size="icon-xs"
+													onClick={() => setQuery("")}
+													className="text-muted-foreground"
+												/>
+											}
+										>
+											<XIcon className="size-3.5" />
+										</TooltipTrigger>
+										<TooltipPopup>Clear search</TooltipPopup>
+									</Tooltip>
+								</InputGroupAddon>
+							)}
+						</InputGroup>
+						<div className="flex items-center justify-between mt-2 px-1 pb-2">
+							<span className="text-xs text-muted-foreground">
+								{total} item{total !== 1 ? "s" : ""} in history
+								{query && " (filtered)"}
+							</span>
+						</div>
+					</div>
+
+					<Separator />
+
+					{/* Items list */}
+					<div className="flex-1 min-h-0">
+						{items.length === 0 ? (
+							<Empty className="h-full">
+								<EmptyMedia variant="icon">
+									<ClipboardIcon className="size-4.5" />
+								</EmptyMedia>
+								<EmptyHeader>
+									<EmptyTitle className="text-base">
+										{loading
+											? "Loading..."
+											: query
+												? "No matches"
+												: "Nothing here yet"}
+									</EmptyTitle>
+									<EmptyDescription>
+										{loading
+											? "Fetching your clipboard history"
+											: query
+												? "Try a different search term"
+												: "Copy something to get started"}
+									</EmptyDescription>
+								</EmptyHeader>
+							</Empty>
+						) : (
+							<ScrollArea scrollFade>
+								<div className="p-1.5">
+									{items.map((item) => (
+										<button
+											type="button"
+											key={item.id}
+											onClick={() => handlePaste(item.id)}
+											className="w-full text-left p-2.5 rounded-lg hover:bg-accent/50 transition-colors group cursor-pointer flex items-start gap-3"
+										>
+											{/* Type icon */}
+											<div className="shrink-0 mt-0.5">
+												{item.type === "text" ? (
+													<div className="size-8 rounded-md border bg-card flex items-center justify-center shadow-sm">
+														<FileTextIcon className="size-4 text-info-foreground" />
+													</div>
+												) : (
+													<div className="size-8 rounded-md border bg-card flex items-center justify-center shadow-sm">
+														<ImageIcon className="size-4 text-warning-foreground" />
+													</div>
+												)}
+											</div>
+
+											{/* Content */}
+											<div className="flex-1 min-w-0">
+												<p className="text-sm text-foreground whitespace-pre-wrap break-words line-clamp-3">
+													{item.type === "text"
+														? truncate(item.preview, 200)
+														: `[Image] ${item.preview}`}
+												</p>
+												<div className="flex items-center gap-2 mt-1.5">
+													<Badge variant="outline" size="sm">
+														{item.source}
+													</Badge>
+													<span className="text-xs text-muted-foreground">
+														{timeAgo(item.timestamp)}
+													</span>
+												</div>
+											</div>
+
+											{/* Delete button */}
+											<Tooltip>
+												<TooltipTrigger
+													render={
+														<Button
+															variant="ghost"
+															size="icon-xs"
+															onClick={(
+																e: React.MouseEvent<HTMLButtonElement>,
+															) => handleDelete(e, item.id)}
+															className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive-foreground"
+														/>
+													}
+												>
+													<Trash2Icon className="size-3.5" />
+												</TooltipTrigger>
+												<TooltipPopup>Delete</TooltipPopup>
+											</Tooltip>
+										</button>
+									))}
+								</div>
+							</ScrollArea>
 						)}
 					</div>
-					<div className="mt-2 text-xs text-gray-500">
-						{total} item{total !== 1 ? "s" : ""} in history
-						{query && " (filtered)"}
+
+					<Separator />
+
+					{/* Footer */}
+					<div className="px-3 py-2 flex items-center justify-between text-xs text-muted-foreground">
+						<span className="flex items-center gap-1.5">
+							<KbdGroup>
+								<Kbd>Super</Kbd>
+								<Kbd>Shift</Kbd>
+								<Kbd>V</Kbd>
+							</KbdGroup>
+							<span>toggle</span>
+						</span>
+						<span className="flex items-center gap-3">
+							<span className="flex items-center gap-1.5">Click to paste</span>
+							<span className="flex items-center gap-1.5">
+								<Kbd>Esc</Kbd>
+								<span>close</span>
+							</span>
+						</span>
 					</div>
 				</div>
-
-				{/* Items list */}
-				<div className="flex-1 overflow-y-auto custom-scrollbar">
-					{items.length === 0 ? (
-						<div className="flex items-center justify-center h-full text-gray-500 text-sm">
-							{loading
-								? "Loading..."
-								: query
-									? "No matching items"
-									: "Clipboard history is empty"}
-						</div>
-					) : (
-						<div className="p-1">
-							{items.map((item) => (
-								<button
-									key={item.id}
-									onClick={() => handlePaste(item.id)}
-									className="w-full text-left p-3 mx-1 my-0.5 rounded-xl hover:bg-gray-800/80 transition-colors group cursor-pointer"
-								>
-									<div className="flex items-start gap-3">
-										{/* Type icon */}
-										<div className="shrink-0 mt-0.5">
-											{item.type === "text" ? (
-												<div className="w-8 h-8 rounded-lg bg-blue-500/20 flex items-center justify-center">
-													<svg
-														className="w-4 h-4 text-blue-400"
-														fill="none"
-														stroke="currentColor"
-														viewBox="0 0 24 24"
-													>
-														<path
-															strokeLinecap="round"
-															strokeLinejoin="round"
-															strokeWidth={2}
-															d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-														/>
-													</svg>
-												</div>
-											) : (
-												<div className="w-8 h-8 rounded-lg bg-purple-500/20 flex items-center justify-center">
-													<svg
-														className="w-4 h-4 text-purple-400"
-														fill="none"
-														stroke="currentColor"
-														viewBox="0 0 24 24"
-													>
-														<path
-															strokeLinecap="round"
-															strokeLinejoin="round"
-															strokeWidth={2}
-															d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
-														/>
-													</svg>
-												</div>
-											)}
-										</div>
-
-										{/* Content */}
-										<div className="flex-1 min-w-0">
-											<p className="text-sm text-gray-200 whitespace-pre-wrap wrap-break-word line-clamp-3">
-												{item.type === "text"
-													? truncate(item.preview, 200)
-													: `[Image] ${item.preview}`}
-											</p>
-											<div className="flex items-center gap-2 mt-1.5">
-												<span className="text-xs text-gray-500 truncate max-w-[200px]">
-													{item.source}
-												</span>
-												<span className="text-xs text-gray-600">
-													{timeAgo(item.timestamp)}
-												</span>
-											</div>
-										</div>
-
-										{/* Delete button */}
-										<button
-											onClick={(e) => handleDelete(e, item.id)}
-											className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded-lg hover:bg-red-500/20 text-gray-500 hover:text-red-400"
-										>
-											<svg
-												className="w-4 h-4"
-												fill="none"
-												stroke="currentColor"
-												viewBox="0 0 24 24"
-											>
-												<path
-													strokeLinecap="round"
-													strokeLinejoin="round"
-													strokeWidth={2}
-													d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-												/>
-											</svg>
-										</button>
-									</div>
-								</button>
-							))}
-						</div>
-					)}
-				</div>
-
-				{/* Footer */}
-				<div className="px-4 py-2 border-t border-gray-700/50 flex items-center justify-between text-xs text-gray-500">
-					<span>Super+Shift+V to toggle</span>
-					<span>Click to paste | Esc to close</span>
-				</div>
 			</div>
-		</div>
+		</TooltipProvider>
 	);
 }
 
